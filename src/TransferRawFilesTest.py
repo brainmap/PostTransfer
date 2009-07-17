@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import unittest
-from TransferRawFiles2 import *
+from TransferRawFiles import *
 
 class TestTransferOptions(unittest.TestCase):
 	def setUp(self):
