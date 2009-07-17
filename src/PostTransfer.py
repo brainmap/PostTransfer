@@ -19,9 +19,9 @@ def create_argument_parser():
     return parser
 
 # Handles parsing command line arguments related to high-level reconstruction,
-# including Subject ID, Raw (Input) Dir and Processed (Output) Dir
+# and returns a hash including Subject ID, Raw (Input) Dir and Processed (Output) Dir
 def parse_arguments(command_line_args):
-    process_variables = {}
+    arguments = {}
     parser = create_argument_parser()
 
     if not len(command_line_args) >= 1:
@@ -29,15 +29,18 @@ def parse_arguments(command_line_args):
         sys.exit()
     (options, args) = parser.parse_args(command_line_args)
 
-    process_variables['subid'] = options.subid
-    process_variables['raw_scans_directory'] = os.path.dirname(options.raw_dir)
-    process_variables['processed_scans_directory'] = os.path.abspath(options.processed_dir)
+    arguments['subid'] = options.subid
+    arguments['raw_scans_directory'] = os.path.abspath(options.raw_dir)
+    arguments['processed_scans_directory'] = os.path.abspath(options.processed_dir)
 
-    return process_variables
+    return arguments
 
-def require_python_version(version_number):
+# Exit unless current python version matches or is higher than required version.
+# You can pass in an explanatory message if you like.
+def require_python_version(version_number, error_msg = "Newer version of Python required."):
     if sys.version < version_number:
-        print 'Newer version of Python required (at least 2.6) required for shutil ignorefiles copy functionality.'
+        print "Python version " + version_number + " is required, but it is currently " + sys.version
+        print error_msg
         sys.exit(1)
 
 # Run Processing on an entire Raw Visit Directory, using default path structure
@@ -45,9 +48,9 @@ def require_python_version(version_number):
 # moment, but I will be adding functionality to it as a processing framework
 # in order to call "real" processing on various image types in the future.
 def main():
-    require_python_version('2.6')
-    process_variables = parse_arguments(sys.argv[1:])
-    visitdir = Visit_directory(process_variables['subid'], process_variables['raw_scans_directory'], process_variables['processed_scans_directory'])
+    require_python_version('2.6', 'Version 2.6 is required for shutil ignorefiles copy functionality.')
+    arguments = parse_arguments(sys.argv[1:])
+    visitdir = Visit_directory(arguments['subid'], arguments['raw_scans_directory'], arguments['processed_scans_directory'])
     visitdir.prepare_working_directory(visitdir.working_directory)
     visitdir.parse_scans_and_create_directory_index()
     visitdir.preprocess_each_scan()
