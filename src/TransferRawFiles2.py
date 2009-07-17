@@ -72,16 +72,10 @@ class TransferTask:
         #if study_vars['recon_fmri_dir']: self.process_pool.add('doFmriRecon')
 
     def check_paths(self):
-        if self.host=='zoot' and 'miho' not in os.getenv('HOSTNAME'):
-            print "SCRIPT CANNOT EXECUTE:"
-            print "You may only transfer files from zoot using Miho due to firewall rules."
-            print "Please ssh onto Miho and try again."
-            #sys.exit(1)
-
         # Check Host and Location
         if 'tezpur' in self.host: self.location='wais'; self.anatomicals_directory = os.path.join(self.local_directory,'dicoms');
         elif 'zoot' in self.host: self.location='uwmr'; self.anatomicals_directory = self.local_directory
-        else: raise StandardError('Host Not Recognized')
+        else: raise StandardError('RemoteHost Not Recognized')
 
         # Check Local Directory
         if os.path.exists(self.local_directory):
@@ -97,6 +91,13 @@ class TransferTask:
         else: self.process_pool |= set(['doTransfer', 'doCreateIndexFile'])
 
     def transfer(self):
+        if self.host=='zoot' and 'miho' not in os.getenv('HOSTNAME'):
+            errmsg = """
+            - Script Cannot Execute -
+            You may only transfer files from zoot using Miho due to firewall rules.
+            Please ssh onto Miho and try again."""
+            raise StandardError(errmsg)
+
         # Transfer Physiology
         if self.host=='zoot':
             os.system("scp %s@%s:/var/ftp/pub/*%s* %s" % (self.user, self.host, self.subid, '/tmp/'))
