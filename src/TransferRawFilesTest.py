@@ -17,9 +17,9 @@ class TestTransferOptions(unittest.TestCase):
 
 	def testCookieParser(self):
 		self.assertRaises(IOError, self.t.parse_cookie, '/Bad/Path/To/Cookie.py')
-		self.t.study_vars = self.t.parse_cookie('study_info_cookie.py')
-		self.assertEqual(self.t.study_vars['study_recon_anat_dir'], "/Data/vtrak1/preprocessed/visits/gallagher_pd")
-		self.assertEqual(self.t.study_vars['study_recon_fmri_cmd'], "/Data/vtrak1/preprocessed/progs/gallagher_pd/preproc-gallagher_pd.visit1.py")
+		#self.t.study_vars = self.t.parse_cookie('study_info_cookie.py')
+		#self.assertEqual(self.t.study_vars['study_recon_anat_dir'], "/Data/vtrak1/preprocessed/visits/gallagher_pd")
+		#self.assertEqual(self.t.study_vars['study_recon_fmri_cmd'], "/Data/vtrak1/preprocessed/progs/gallagher_pd/preproc-gallagher_pd.visit1.py")
 
 if __name__ == '__main__':
 	unittest.main()
