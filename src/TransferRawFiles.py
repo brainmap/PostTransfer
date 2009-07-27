@@ -37,7 +37,7 @@ class TransferTask:
             if self.options.in_study: cookie_file = self.options.in_study
             else: cookie_file = os.path.join(self.study_vars['raw_dir'], self.DEFAULT_COOKIE)
             self.study_vars['recon_anat_dir'], self.study_vars['recon_fmri_cmd'] = self.parse_cookie(cookie_file)
-        except IOError as err:
+        except IOError, err:
             print err.args
 
     # Parses the command line to determine variables needed for transfer and processing.

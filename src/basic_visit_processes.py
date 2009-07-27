@@ -15,7 +15,7 @@ class Visit_directory:
 
         try:
             self.check_paths()
-        except IOError as err:
+        except IOError, err:
             print "There was a problem with permissions or paths: " + err
             sys.exit(1)
 
@@ -60,7 +60,7 @@ class Visit_directory:
     # Run basic preprocessing.  This currently just runs an old shell script, but will be
     # updated to integrate with our imaging database and yaml processing configuration.
     def preprocess_each_scan(self):
-        for recon_type in ['anat', 'fmri']:
+        for recon_type in ['anat']:
             if not os.path.exists(os.path.join(self.processed_scans_directory, recon_type)):
                 self.recon(recon_type)
 
@@ -84,7 +84,7 @@ class Visit_directory:
             if not os.access(self.raw_scans_directory, os.W_OK):
                 raise IOError, "Error: Raw directory " + path + " must be writable to zip files.  Try again as the raw user."
             else: self.zip(self.anatomicals_directory)
-        except IOError as err:
+        except IOError, err:
             print err
 
     # Creates and executes a shell find command to recursively zip a directory, ignoring select small files
