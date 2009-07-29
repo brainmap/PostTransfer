@@ -2,128 +2,159 @@
 ''' TransferRawFiles.py copies Imaging Scans from remote scanners and runs default processing after the copy.'''
 
 from optparse import OptionParser
-import sys
-import os
-from shutil import rmtree
+import sys, os
+import shutil
+import re
+import glob
+from basic_visit_processes import Visit_directory
 
-doPHYS = False; doTRANSFER = True; doCREATEINDEXFILE = True; doANATRECON = False; doFMRIRECON = False; doFMRIPIPE = False
-DEFAULT_COOKIE = 'study_info_cookie.py'
-study_raw_dir, study_recon_anat_dir, study_recon_fmri_dir, study_fmri_cookie, waisman_info_file = (None, None, None, None, None)
+class TransferTask:
+    # Initialize Vars
+    process_pool=set()
+    study_vars={'raw_dir':None, 'recon_anat_dir': None, 'recon_fmri_cmd': None}
+    PREPROC_SCRIPT = '/Data/data1/lab_scripts/preproc_anat.sh '
+    CREATE_CONTENTS_SCRIPT='/Data/data1/lab_scripts/create_contents.sh '
+    DEFAULT_COOKIE = 'study_info_cookie.py'
 
-parser = OptionParser(usage="Copies Imaging Scans from remote scanners and runs default processing after the copy.")
+    def __init__(self, command_line_args = sys.argv[1:]):
+        # Argument Parser
+        usage="%prog [options] : Copies Imaging Scans from remote scanners and runs default processing after the copy."
+        parser = OptionParser(usage=usage)
+        parser.add_option("--subid", "--for", help="Subject Id to use in reconstruction (i.e. 2532)")
+        parser.add_option("--remote_location", "--from", help="Source location (user@host:~/sourceDirectory) to transfer. ex; sdc@zoot:~/DICOM/6944_*")
+        parser.add_option("--to", help="Destination directory for transfer (ex: /Data/vtrak1/raw/wrap140/2532")
+        parser.add_option("--in_study", help="Path to study cookie.", default=False)
+        (self.options, args) = parser.parse_args(command_line_args)
+        if not len(command_line_args) >= 1:
+            parser.print_help()
+            sys.exit()
+            
 
-parser.add_option("--subid", "--for", help="Subject Id to use in reconstruction (i.e. 2532)")
-parser.add_option("--remote_location", "--from", help="Source location (user@host:~/sourceDirectory) to transfer. ex; sdc@zoot:~/DICOM/6944_*")
-parser.add_option("--to", help="Destination directory for transfer (ex: /Data/vtrak1/raw/wrap140/2532")
-parser.add_option("--in_study", help="Path to study cookie.", default=False)
-(options, args) = parser.parse_args()
+        self.local_directory, self.subid, self.study_vars['raw_dir'], self.user, self.host, self.remote_directory = self.parse_command_line()
+
+        # Parse the Study Info Cookie
+        try:
+            if self.options.in_study: cookie_file = self.options.in_study
+            else: cookie_file = os.path.join(self.study_vars['raw_dir'], self.DEFAULT_COOKIE)
+            self.study_vars['recon_anat_dir'], self.study_vars['recon_fmri_cmd'] = self.parse_cookie(cookie_file)
+        except IOError, err:
+            print err.args
+
+    # Parses the command line to determine variables needed for transfer and processing.
+    # Returns user, host and remote directory as three strings.
+    def parse_command_line(self):
+
+        local_directory = self.options.to
+        subid = self.options.subid
+        raw_dir=os.path.dirname(self.options.to)
+        
+        user, rest = self.options.remote_location.split('@')
+        host, remote_directory = rest.split(':')
+
+        return local_directory, subid, raw_dir, user, host, remote_directory
 
 
-local_directory = options.to
-subid = options.subid
-study_raw_dir = os.path.dirname(options.to)
+    # Returns variables about a study from the info cookie in its raw directory.
+    def parse_cookie(self, cookie_file):
+        if os.path.exists(cookie_file):
+            study_variables = []
+            cookie = open(cookie_file, 'r')
+            exec(cookie.read())
+            cookie.close()
+            #study_variables['study_recon_anat_dir'] = study_recon_anat_dir
+            #study_variables['study_recon_fmri_cmd'] = study_recon_fmri_cmd
+            return study_recon_anat_dir, study_recon_fmri_cmd
+        else: raise IOError('No Study Cookie Found')
 
-if options.in_study:
-    cookie_file = options.in_study
-else: cookie_file = os.path.join(study_raw_dir, DEFAULT_COOKIE)
+    def set_process_pool(self, study_vars):
+        # Check Study Variables
+        if study_vars['recon_anat_dir']: self.process_pool.add('doAnatRecon')
+        #if study_vars['recon_fmri_dir']: self.process_pool.add('doFmriRecon')
 
-if os.path.exists(cookie_file):
-    cookie = open(cookie_file, 'r')
-    exec(cookie.read())
-    cookie.close()
-else: print "Info: No Study Cookie Found."
+    def check_paths(self):
+        # Check Host and Location
+        if 'tezpur' in self.host: self.location='wais'; self.anatomicals_directory = os.path.join(self.local_directory,'dicoms');
+        elif 'zoot' in self.host: self.location='uwmr'; self.anatomicals_directory = self.local_directory
+        else: raise StandardError('RemoteHost Not Recognized')
+
+        # Check Local Directory
+        if os.path.exists(self.local_directory):
+            print 'The local directory ' + self.local_directory + ' already exists.'
+            while True:
+                print 'Skip transfer, overwrite local dir or cancel? < skip | overwrite | cancel > '
+                input = sys.stdin.readline().strip()
+                if input in ['skip', 'overwrite', 'cancel']: break
+
+            if input == 'skip': print "Skipping..."
+            elif input == 'overwrite': shutil.rmtree(self.local_directory)
+            elif input == 'cancel': sys.exit(1)
+        else: self.process_pool |= set(['doTransfer', 'doCreateIndexFile'])
+
+    def transfer(self):
+        if self.host=='zoot' and 'miho' not in os.getenv('HOSTNAME'):
+            errmsg = """
+            - Script Cannot Execute -
+            You may only transfer files from zoot using Miho due to firewall rules.
+            Please ssh onto Miho and try again."""
+            raise StandardError(errmsg)
+
+        # Transfer Physiology
+        if self.host=='zoot':
+            os.system("scp %s@%s:/var/ftp/pub/*%s* %s" % (self.user, self.host, self.subid, '/tmp/'))
+
+        # Transfer Remote Directory
+        os.system("scp -r %s %s" % (self.options.remote_location, self.local_directory))
+
+        if not os.path.exists(self.local_directory):
+            raise IOError("Error During Transfer.  You either have typed in the remote directory incorrectly, it doesn't exist, or you have a permissions error." % (self.local_directory))
+
+        # Move Physiology into Anatomicals Directory
+        physiology_tar_file = glob.glob(os.path.join('/tmp', self.subid + '*'))[0]
+        shutil.move(physiology_tar_file, self.anatomicals_directory)
 
 
-# Check Study Variables
-if study_recon_anat_dir: doANATRECON = True
-if study_recon_fmri_dir: doFMRIRECON = True
-if study_fmri_cookie: doFMRIPIPE = True
+    ## Copy a Directory Tree and decompress any zipped images.
+    #  Used to create a local copy of unziped raw data.
+    #  Raises an Error if the Destination directory exists.
+    def copyAndUnzip(self, src, dst):
+        def ignoreFiles(dir, files):
+            if dir != src: return []
+            matcher = re.compile("^((\d\d\d)|[sS]\d).*")
+            matches = [f for f in files if matcher.match(f)]
+            ignored = list(set(files) - set(matches))
+            print "Ignoring ", ignored
+            return ignored
 
-user, rest = options.remote_location.split('@')
-host, remote_directory = rest.split(':')
+        src = os.path.abspath(src)
+        dst = os.path.abspath(dst)
+        print "Copying directory " + src + " to temporary location: " + dst
+        if os.path.exists(dst):
+            # shutil.copytree will not overwrite directories, so the destination directory cannot exist.
+            raise IOError("THE DESTINATION DIRECTORY CANNOT EXIST.  Program terminating.")
+        shutil.copytree(src, dst, True, ignoreFiles)
+        for (path, dirnames, filenames) in os.walk(dst):
+            for f in filenames:
+                file = os.path.join(path, f)
+                if file.endswith(".bz2"):
+                    os.system("bunzip2 %s" % (file,))
 
-if host=='zoot' and 'miho' not in os.getenv('HOSTNAME'):
-    print "SCRIPT CANNOT EXECUTE:"
-    print "You may only transfer files from zoot using Miho due to firewall rules."
-    print "Please ssh onto Miho and try again."
-    sys.exit(1)
+def main():
 
-# Check Host and Location
-if 'tezpur' in host: 
-    location='wais'; isZipped = True
-    if os.path.islink(os.path.join(local_directory, 'anatomicals')):
-      anatomicals_directory = os.path.join(local_directory,'dicoms')
-    else:
-      anatomicals_directory = os.path.join(local_directory,'anatomicals')
-    waisman_info_file = os.path.join(local_directory, 'info.txt')
-elif 'zoot' in host: 
-    location='uwmr'; isZipped = False; anatomicals_directory = local_directory
-else: sys.exit(1)
+    t = TransferTask()
+    t.set_process_pool(t.study_vars)
+    t.check_paths()
 
-# Check Local Directory
-if os.path.exists(local_directory):
-    print 'The local directory ' + local_directory + ' already exists.'
-    while True:
-        print 'Skip transfer, overwrite local dir or cancel? < skip | overwrite | cancel > '
-        input = sys.stdin.readline().strip()
-        if input in ['skip', 'overwrite', 'cancel']: break
+    if 'doTransfer' in t.process_pool: t.transfer()
 
-    if input == 'skip': doTRANSFER=False; doCREATEINDEXFILE = False
-    elif input == 'overwrite': rmtree(local_directory)
-    elif input == 'cancel': sys.exit(1)
+    if 'doCreateIndexFile' or 'doAnatRecon' in t.process_pool:
+        visitdir = Visit_directory(subid, t.anatomicals_directory, os.path.join(t.study_vars['recon_anat_dir'], t.subid))
+        visitdir.prepare_working_directory(visitdir.working_directory)
+        if 'doCreateIndexFile' in t.process_pool: visitdir.parse_scans_and_create_directory_index()
+        if 'doAnatRecon' in t.process_pool: visitdir.preprocess_each_scan()
+        visitdir.tidy_up()
 
-# Begin Processing
 
-# 1. Prepare DTI (Implement Later)
-
-# 2. SCP Subject's Raw Directory to Vtrak.
-if doTRANSFER:
-    #cmd = "scp -r %s %s" % (options.remote_location, local_directory)
-    os.system("scp -r %s %s" % (options.remote_location, local_directory))
-
-    if not os.path.exists(local_directory):
-        print "TRANSFER CANCELLED.  Local Directory %s could not be created." % (local_directory,)
-        sys.exit(1)
-
-# 3. Check DTI (File Count) (Implement Later)
-
-# 4. Unzip files to allow processing.
-if isZipped:
-    print "Unzipping " + anatomicals_directory
-    os.system("find " + anatomicals_directory + " -name '*.bz2' -exec bunzip2 {} \;")
-    isZipped = False
-
-# 5. Create Anatdirs text file.
-if doCREATEINDEXFILE:
-    anat_index_file = os.path.join(anatomicals_directory, "anat_list_" + subid + ".txt")
-    cmd = "create_contents.sh %s %s" % (anatomicals_directory, anat_index_file)
-    os.system(cmd)
-    os.system("lpr " + anat_index_file)
+if __name__ == "__main__":
+    main()
     
-    if waisman_info_file:                                 # Check if path has been set.
-        if os.path.exists(waisman_info_file):             # Check if path points to a valid file.
-            print os.system("lpr " + waisman_info_file)
 
-# 6. Reconstruct Anatomical Images.
-if doANATRECON:
-    cmd = "preproc_anat.sh %s %s %s anat" % (anatomicals_directory, os.path.join(study_recon_anat_dir, subid), subid)
-    os.system(cmd)
-
-# 7. Reconstruct Functional Images.
-if doFMRIRECON:
-    cmd = "preproc_anat.sh %s %s %s fmri" % (anatomicals_directory, os.path.join(study_recon_fmri_dir, subid), subid)
-    os.system(cmd)
-
-# 8. Transfer Physiological Data from the Hospital.
-if doPHYS:
-    cmd = "scp %s@%s:/var/ftp/pub/*%s* %s" % (user, host, subid, anatomicals_directory)
-
-# 9. Run Functional Pipeline
-if doFMRIPIPE:
-    cmd = "/Data/home/erik/pipeline_dev/study_wrappers/preproc.sh %s %s" % (subid, study_fmri_cookie)
-    os.system(cmd)
-
-# 10. Cleanup
-if not isZipped:
-    print "Zipping " + anatomicals_directory
-    os.system("find " + anatomicals_directory + " -type f -not -name '*.txt' -not -name '*.yaml' -name '*' -exec bzip2 {} \;")
