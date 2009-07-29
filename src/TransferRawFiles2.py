@@ -24,10 +24,12 @@ class TransferTask:
         parser.add_option("--remote_location", "--from", help="Source location (user@host:~/sourceDirectory) to transfer. ex; sdc@zoot:~/DICOM/6944_*")
         parser.add_option("--to", help="Destination directory for transfer (ex: /Data/vtrak1/raw/wrap140/2532")
         parser.add_option("--in_study", help="Path to study cookie.", default=False)
-        (self.options, args) = parser.parse_args(command_line_args)
+        
         if not len(command_line_args) >= 1:
             parser.print_help()
             sys.exit()
+
+        (self.options, args) = parser.parse_args(command_line_args)
             
 
         self.local_directory, self.subid, self.study_vars['raw_dir'], self.user, self.host, self.remote_directory = self.parse_command_line()
