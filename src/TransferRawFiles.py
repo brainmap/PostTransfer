@@ -16,7 +16,7 @@ class TransferTask:
     CREATE_CONTENTS_SCRIPT='/Data/data1/lab_scripts/create_contents.sh '
     DEFAULT_COOKIE = 'study_info_cookie.py'
 
-    def __init__(self, command_line_args = sys.argv[1:]):
+    def __init__(self, command_line_args):
         # Argument Parser
         usage="%prog [options] : Copies Imaging Scans from remote scanners and runs default processing after the copy."
         parser = OptionParser(usage=usage)
@@ -70,6 +70,7 @@ class TransferTask:
         # Check Study Variables
         if study_vars['recon_anat_dir']: self.process_pool.add('doAnatRecon')
         #if study_vars['recon_fmri_dir']: self.process_pool.add('doFmriRecon')
+        self.process_pool.add('doCreateIndexFile')
 
     def check_paths(self):
         # Check Host and Location
@@ -109,8 +110,12 @@ class TransferTask:
             raise IOError("Error During Transfer.  You either have typed in the remote directory incorrectly, it doesn't exist, or you have a permissions error." % (self.local_directory))
 
         # Move Physiology into Anatomicals Directory
-        physiology_tar_file = glob.glob(os.path.join('/tmp', self.subid + '*'))[0]
-        shutil.move(physiology_tar_file, self.anatomicals_directory)
+        try:
+            physiology_tar_file = glob.glob(os.path.join('/tmp', self.subid + '*'))[0]
+            shutil.move(physiology_tar_file, self.anatomicals_directory)
+        except:
+            print "Could'nt find a physiology file - check manually. "
+
 
 
     ## Copy a Directory Tree and decompress any zipped images.
@@ -140,14 +145,14 @@ class TransferTask:
 
 def main():
 
-    t = TransferTask()
+    t = TransferTask(sys.argv[1:])
     t.set_process_pool(t.study_vars)
     t.check_paths()
 
     if 'doTransfer' in t.process_pool: t.transfer()
 
-    if 'doCreateIndexFile' or 'doAnatRecon' in t.process_pool:
-        visitdir = Visit_directory(subid, t.anatomicals_directory, os.path.join(t.study_vars['recon_anat_dir'], t.subid))
+    if 'doCreateIndexFile' in t.process_pool or 'doAnatRecon' in t.process_pool:
+        visitdir = Visit_directory(t.subid, t.anatomicals_directory, os.path.join(t.study_vars['recon_anat_dir'], t.subid))
         visitdir.prepare_working_directory(visitdir.working_directory)
         if 'doCreateIndexFile' in t.process_pool: visitdir.parse_scans_and_create_directory_index()
         if 'doAnatRecon' in t.process_pool: visitdir.preprocess_each_scan()

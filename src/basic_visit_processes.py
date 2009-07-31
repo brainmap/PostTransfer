@@ -37,7 +37,7 @@ class Visit_directory:
     def prepare_working_directory(self, working_directory):
         if not os.path.exists(working_directory):
             self.copyAndUnzip(self.raw_scans_directory, working_directory)
-        else: print "Temporary working directory " + working_directory + "already exists."
+        else: print "Temporary working directory " + working_directory + " already exists."
 
     # Scan the visit and determine what scans occured and need to be processed.
     # Eventually I will work in the sql database to scan that instead of
@@ -75,15 +75,16 @@ class Visit_directory:
 
     # Cleanup
     def tidy_up(self):
-        self.tidy_up_raw_scans_directory
-        self.tidy_up_working_directory
+        print "Tidying Up Visit Directories for " + self.subid
+        self.tidy_up_raw_scans_directory()
+        self.tidy_up_working_directory()
 
     # Zip All dicoms in the Raw Directory
     def tidy_up_raw_scans_directory(self):
         try:
             if not os.access(self.raw_scans_directory, os.W_OK):
-                raise IOError, "Error: Raw directory " + path + " must be writable to zip files.  Try again as the raw user."
-            else: self.zip(self.anatomicals_directory)
+                raise IOError, "Error: Raw directory " + self.raw_scans_directory + " must be writable to zip files.  Try again as the raw user."
+            else: self.zip(self.raw_scans_directory)
         except IOError, err:
             print err
 
@@ -95,6 +96,7 @@ class Visit_directory:
 
     # Remove the Working Directory
     def tidy_up_working_directory(self):
+        print "Tidying up temporary working directory " + self.working_directory
         shutil.rmtree(self.working_directory)
 
     ## Copy a Directory Tree and decompress any zipped images.
