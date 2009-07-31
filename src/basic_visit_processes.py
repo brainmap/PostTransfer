@@ -45,7 +45,10 @@ class Visit_directory:
     # check file counts and scan series descriptions.
     def parse_scans_and_create_directory_index(self):
         index_file_path = self.create_index_file(self.working_directory)
-        if not os.path.exists(index_file_path): shutil.copy(index_file_path, self.raw_scans_directory)
+
+        # Move Index file to raw_scans_directory if it doesn't exist.
+        if not os.path.exists(os.path.join(self.raw_scans_directory, os.path.basename(index_file_path))): 
+	        shutil.copy(index_file_path, self.raw_scans_directory)
 
     # Creates and executes the old-school shell command for walking through dicoms and extracting 
     # series descriptions and counts to create an index text file of scans in a visit.
@@ -96,7 +99,7 @@ class Visit_directory:
 
     # Remove the Working Directory
     def tidy_up_working_directory(self):
-        print "Tidying up temporary working directory " + self.working_directory
+        print "Tidying up temporary working directory " + self.working_directory + " (by removing it)."
         shutil.rmtree(self.working_directory)
 
     ## Copy a Directory Tree and decompress any zipped images.
@@ -118,6 +121,8 @@ class Visit_directory:
             # shutil.copytree will not overwrite directories, so the destination directory cannot exist.
             raise IOError("THE DESTINATION DIRECTORY CANNOT EXIST.  Program terminating.")
         shutil.copytree(src, dst, True, ignoreFiles)
+
+        print "Finished copying; now unzipping..."
         for (path, dirnames, filenames) in os.walk(dst):
             for f in filenames:
                 file = os.path.join(path, f)

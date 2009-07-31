@@ -156,7 +156,7 @@ def main():
         visitdir.prepare_working_directory(visitdir.working_directory)
         if 'doCreateIndexFile' in t.process_pool: visitdir.parse_scans_and_create_directory_index()
         if 'doAnatRecon' in t.process_pool: visitdir.preprocess_each_scan()
-        visitdir.tidy_up()
+        #visitdir.tidy_up()
 
 
 if __name__ == "__main__":
