@@ -37,8 +37,10 @@ class TransferTask:
             if self.options.in_study: cookie_file = self.options.in_study
             else: cookie_file = os.path.join(self.study_vars['raw_dir'], self.DEFAULT_COOKIE)
             self.study_vars['recon_anat_dir'], self.study_vars['recon_fmri_cmd'] = self.parse_cookie(cookie_file)
-        except IOError, err:
-            print err.args
+            self.processed_scans_directory = os.path.join(t.study_vars['recon_anat_dir'], t.subid)
+        except IOError as err:
+            print err
+            self.processed_scans_directory = ""
 
     # Parses the command line to determine variables needed for transfer and processing.
     # Returns user, host and remote directory as three strings.
@@ -152,7 +154,7 @@ def main():
     if 'doTransfer' in t.process_pool: t.transfer()
 
     if 'doCreateIndexFile' in t.process_pool or 'doAnatRecon' in t.process_pool:
-        visitdir = Visit_directory(t.subid, t.anatomicals_directory, os.path.join(t.study_vars['recon_anat_dir'], t.subid))
+        visitdir = Visit_directory(t.subid, t.anatomicals_directory, t.processed_scans_directory)
         visitdir.prepare_working_directory(visitdir.working_directory)
         if 'doCreateIndexFile' in t.process_pool: visitdir.parse_scans_and_create_directory_index()
         if 'doAnatRecon' in t.process_pool: visitdir.preprocess_each_scan()

@@ -16,6 +16,7 @@ def create_argument_parser():
     parser.add_option("--subid", "--for", help="Subject Id to use in reconstruction (i.e. 2532)")
     parser.add_option("--raw_dir", "-r", help="Raw Visit Directory")
     parser.add_option("--processed_dir", "-p", help="Processed Visit Directory")
+    parser.add_option("--no_cleanup", help="Don't Tidy up temporary directory.", dest="cleanup", default=True, action="store_false")
     return parser
 
 # Handles parsing command line arguments related to high-level reconstruction,
@@ -32,6 +33,7 @@ def parse_arguments(command_line_args):
     arguments['subid'] = options.subid
     arguments['raw_scans_directory'] = os.path.abspath(options.raw_dir)
     arguments['processed_scans_directory'] = os.path.abspath(options.processed_dir)
+    arguments['cleanup'] = options.cleanup
 
     return arguments
 
@@ -48,13 +50,17 @@ def require_python_version(version_number, error_msg = "Newer version of Python 
 # moment, but I will be adding functionality to it as a processing framework
 # in order to call "real" processing on various image types in the future.
 def main():
-    require_python_version('2.6', 'Version 2.6 is required for shutil ignorefiles copy functionality.')
-    arguments = parse_arguments(sys.argv[1:])
-    visitdir = Visit_directory(arguments['subid'], arguments['raw_scans_directory'], arguments['processed_scans_directory'])
-    visitdir.prepare_working_directory(visitdir.working_directory)
-    visitdir.parse_scans_and_create_directory_index()
-    visitdir.preprocess_each_scan()
-    visitdir.tidy_up()
+    try:
+        require_python_version('2.6', 'Version 2.6 is required for shutil ignorefiles copy functionality.')
+        arguments = parse_arguments(sys.argv[1:])
+        visitdir = Visit_directory(arguments['subid'], arguments['raw_scans_directory'], arguments['processed_scans_directory'])
+        visitdir.prepare_working_directory(visitdir.working_directory)
+        visitdir.parse_scans_and_create_directory_index()
+        visitdir.preprocess_each_scan()
+        if arguments["cleanup"]: visitdir.tidy_up()
+    except IOError as e:
+        print "There was an IO error in processing:"; print e
 
 if __name__ == "__main__":
     main()
+

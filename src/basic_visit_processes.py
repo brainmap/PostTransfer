@@ -1,12 +1,13 @@
 import shutil
 import re
 import os
+import sys
 
 # Define a visit_directory class to encapsulate processing.
 class Visit_directory:
     PREPROC_SCRIPT = '/Data/data1/lab_scripts/preproc_anat.sh '
     CREATE_CONTENTS_SCRIPT='/Data/data1/lab_scripts/create_contents.sh '
-
+    
     def __init__(self, subid, raw_scans_directory, processed_scans_directory):
         self.subid = subid
         self.raw_scans_directory = raw_scans_directory
@@ -15,23 +16,24 @@ class Visit_directory:
 
         try:
             self.check_paths()
-        except IOError, err:
-            print "There was a problem with permissions or paths: " + err
+        except IOError as err:
+            print "There was a problem with permissions or paths: "
+            print err
             sys.exit(1)
 
     # Basic Sanity & Directory Permissions Checking
     def check_paths(self):
         # Ensure that Raw Directory Exists and is Readable
         if not os.path.exists(self.raw_scans_directory):
-            raise IOError, "Visit raw directory " + self.raw_scans_directory + " does not exist."
+            raise IOError("Visit raw directory " + self.raw_scans_directory + " does not exist.")
         elif not os.access(self.raw_scans_directory, os.R_OK):
-            raise IOError, "Cannot read visit raw directory: " + path
+            raise IOError("Cannot read visit raw directory: " + path)
 
         # Check any paths that will be written to for correct permissions.
         for path in [self.processed_scans_directory]:
             if os.path.exists(path):
-                if not os.access(path, os.W_OK): raise IOError, "Cannot write to: " + path
-            else: print "Creating " + path + "..."; os.makedirs(path)
+                if not os.access(path, os.W_OK): raise(IOError, "Cannot write to: " + path)
+            else: "Creating " + path + "..."; os.makedirs(path)
 
     # Create a copy of data on a local, quick disk and unzip all raw data inside.
     def prepare_working_directory(self, working_directory):
@@ -48,7 +50,9 @@ class Visit_directory:
 
         # Move Index file to raw_scans_directory if it doesn't exist.
         if not os.path.exists(os.path.join(self.raw_scans_directory, os.path.basename(index_file_path))): 
-	        shutil.copy(index_file_path, self.raw_scans_directory)
+            if not os.access(self.raw_scans_directory, os.W_OK): 
+                print "Copying " + index_file_path + " to " + self.raw_scans_directory
+                shutil.copy(index_file_path, self.raw_scans_directory)
 
     # Creates and executes the old-school shell command for walking through dicoms and extracting 
     # series descriptions and counts to create an index text file of scans in a visit.
@@ -56,6 +60,7 @@ class Visit_directory:
         if not filename: filename = 'anat_list_' + self.subid + '.txt'
         index_file_path = os.path.join(directory_to_scan, filename)
         cmd = self.CREATE_CONTENTS_SCRIPT + " %s %s" % (directory_to_scan, index_file_path)
+        print "Creating Index File:" + cmd
         os.system(cmd)
         #os.system("lpr " + anat_index_file)
         return os.path.abspath(index_file_path)
@@ -66,6 +71,7 @@ class Visit_directory:
         for recon_type in ['anat']:
             if not os.path.exists(os.path.join(self.processed_scans_directory, recon_type)):
                 self.recon(recon_type)
+            else: raise(IOError("Output reconstruction directory exists; not reconstructing."))
 
     # Compiles Shell Command for reconstruction with preproc_anat.sh and runs it.
     def recon(self, recon_type, prefix = None, output_directory = None):
@@ -86,7 +92,7 @@ class Visit_directory:
     def tidy_up_raw_scans_directory(self):
         try:
             if not os.access(self.raw_scans_directory, os.W_OK):
-                raise IOError, "Error: Raw directory " + self.raw_scans_directory + " must be writable to zip files.  Try again as the raw user."
+                raise IOError("Error: Raw directory " + self.raw_scans_directory + " must be writable to zip files.  Try again as the raw user.")
             else: self.zip(self.raw_scans_directory)
         except IOError, err:
             print err
@@ -100,7 +106,10 @@ class Visit_directory:
     # Remove the Working Directory
     def tidy_up_working_directory(self):
         print "Tidying up temporary working directory " + self.working_directory + " (by removing it)."
-        shutil.rmtree(self.working_directory)
+        if os.access(self.working_directory, OS.W_OK):
+            shutil.rmtree(self.working_directory)
+        else: 
+            raise IOError("Cannot remove temp directory " + self.working_directory + "; you don't have write permissions.")
 
     ## Copy a Directory Tree and decompress any zipped images.
     #  Used to create a local copy of unziped raw data.
