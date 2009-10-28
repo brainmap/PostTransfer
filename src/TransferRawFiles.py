@@ -37,7 +37,7 @@ class TransferTask:
             if self.options.in_study: cookie_file = self.options.in_study
             else: cookie_file = os.path.join(self.study_vars['raw_dir'], self.DEFAULT_COOKIE)
             self.study_vars['recon_anat_dir'], self.study_vars['recon_fmri_cmd'] = self.parse_cookie(cookie_file)
-            self.processed_scans_directory = os.path.join(t.study_vars['recon_anat_dir'], t.subid)
+            self.processed_scans_directory = os.path.join(self.study_vars['recon_anat_dir'], self.subid)
         except IOError as err:
             print err
             self.processed_scans_directory = ""
